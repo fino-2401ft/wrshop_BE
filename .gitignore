@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+uploads
+*.log
+.DS_Store
+data
+.prisma
+*.tmp.js
+tmp-*.js
+tmp-*.py
+tmp-*.json
