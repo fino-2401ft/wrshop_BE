@@ -78,4 +78,16 @@ export class StorageService {
       if (error.code !== 'ENOENT') throw error;
     });
   }
+
+  /** Rewrite localhost upload URLs so tunnel/public visitors can load images. */
+  publicUrl(url: string | null | undefined): string | null {
+    if (!url) return null;
+    const base = (this.config.get<string>('PUBLIC_BASE_URL') ?? 'http://localhost:3000').replace(
+      /\/$/,
+      '',
+    );
+    return url
+      .replace(/^https?:\/\/localhost:3000(?=\/)/i, base)
+      .replace(/^https?:\/\/127\.0\.0\.1:3000(?=\/)/i, base);
+  }
 }

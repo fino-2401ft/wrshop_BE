@@ -37,7 +37,6 @@ export class AccountsService {
           where: { categoryId: category.id, status: 'AVAILABLE' },
           include: WITH_CATEGORY,
           orderBy: { createdAt: 'desc' },
-          take: 8,
         });
         return {
           category: category.code,
@@ -203,7 +202,7 @@ export class AccountsService {
       })),
       images: account.images.map((image) => ({
         id: image.id,
-        url: image.url,
+        url: this.storage.publicUrl(image.url) ?? image.url,
         key: image.key,
         sortOrder: image.sortOrder,
         isCover: image.isCover,
@@ -529,7 +528,7 @@ export class AccountsService {
       description: account.description,
       specs: account.specs,
       status: account.status as AccountStatus,
-      coverUrl: cover?.url ?? null,
+      coverUrl: this.storage.publicUrl(cover?.url ?? null),
       createdAt: account.createdAt,
     };
   }
@@ -542,7 +541,7 @@ export class AccountsService {
       ...this.toCard(account),
       images: images.map((image) => ({
         id: image.id,
-        url: image.url,
+        url: this.storage.publicUrl(image.url) ?? image.url,
         sortOrder: image.sortOrder,
         isCover: image.isCover,
       })),
