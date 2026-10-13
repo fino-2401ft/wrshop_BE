@@ -57,6 +57,7 @@ model Account {
   cost           Int            @default(0)
   profit         Int            @default(0)
   consignment    Boolean        @default(false)
+  isHot          Boolean        @default(false)
   dueAt          DateTime?
   reminded3dAt   DateTime?
   remindedDueAt  DateTime?

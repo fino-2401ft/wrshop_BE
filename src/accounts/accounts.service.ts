@@ -36,7 +36,7 @@ export class AccountsService {
         const rows = await this.prisma.account.findMany({
           where: { categoryId: category.id, status: 'AVAILABLE' },
           include: WITH_CATEGORY,
-          orderBy: { createdAt: 'desc' },
+          orderBy: [{ isHot: 'desc' }, { createdAt: 'desc' }],
         });
         return {
           category: category.code,
@@ -189,6 +189,7 @@ export class AccountsService {
       cost: account.cost,
       profit: account.profit,
       consignment: account.consignment,
+      isHot: account.isHot,
       dueAt: account.dueAt,
       orders: account.orders.map((order) => ({
         id: order.id,
@@ -229,6 +230,7 @@ export class AccountsService {
         cost: this.contributedAmount(dto.cost ?? 0, 1_000_000_000),
         profit: this.profitAmount(dto.profit ?? dto.price - (dto.cost ?? 0)),
         consignment: dto.consignment ?? false,
+        isHot: dto.isHot ?? false,
         ...this.dueData(null, dto.status ?? 'AVAILABLE', dto.dueAt),
       },
     });
@@ -263,6 +265,7 @@ export class AccountsService {
     if (dto.cost !== undefined) data.cost = this.contributedAmount(dto.cost, 1_000_000_000);
     if (dto.profit !== undefined) data.profit = this.profitAmount(dto.profit);
     if (dto.consignment !== undefined) data.consignment = dto.consignment;
+    if (dto.isHot !== undefined) data.isHot = dto.isHot;
     const nextStatus = dto.status ?? current?.status ?? 'AVAILABLE';
     if (nextStatus === 'RESERVED') Object.assign(data, this.dueData(current ?? null, nextStatus, dto.dueAt));
     if (dto.specs) data.specs = cleanSpecs(dto.specs);
@@ -484,10 +487,10 @@ export class AccountsService {
     return where;
   }
 
-  private orderBy(sort?: ListAccountsQuery['sort']): Prisma.AccountOrderByWithRelationInput {
-    if (sort === 'price_asc') return { price: 'asc' };
-    if (sort === 'price_desc') return { price: 'desc' };
-    return { createdAt: 'desc' };
+  private orderBy(sort?: ListAccountsQuery['sort']): Prisma.AccountOrderByWithRelationInput[] {
+    if (sort === 'price_asc') return [{ isHot: 'desc' }, { price: 'asc' }];
+    if (sort === 'price_desc') return [{ isHot: 'desc' }, { price: 'desc' }];
+    return [{ isHot: 'desc' }, { createdAt: 'desc' }];
   }
 
   private parseCode(raw?: string) {
@@ -528,6 +531,7 @@ export class AccountsService {
       description: account.description,
       specs: account.specs,
       status: account.status as AccountStatus,
+      isHot: account.isHot,
       coverUrl: this.storage.publicUrl(cover?.url ?? null),
       createdAt: account.createdAt,
     };
