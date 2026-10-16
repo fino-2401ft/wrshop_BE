@@ -133,6 +133,12 @@ export class CreateAccountDto {
 
 export class UpdateAccountDto {
   @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000_000)
+  publicCode?: number;
+
+  @IsOptional()
   @IsString()
   category?: string;
 

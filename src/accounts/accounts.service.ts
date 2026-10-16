@@ -197,7 +197,7 @@ export class AccountsService {
         buyerName: order.buyerName,
         phone: order.phone,
         email: order.email,
-        amount: order.amount,
+        amount: order.status === 'ABANDONED' ? (order.settlementAmount ?? order.amount) : order.amount,
         status: order.status,
         createdAt: order.createdAt,
       })),
@@ -242,9 +242,22 @@ export class AccountsService {
     await this.ensure(id);
     const current = await this.prisma.account.findUnique({
       where: { id },
-      select: { price: true, contributed: true, status: true, dueAt: true },
+      select: { price: true, contributed: true, status: true, dueAt: true, publicCode: true },
     });
     const data: Prisma.AccountUncheckedUpdateInput = {};
+    if (dto.publicCode !== undefined && dto.publicCode !== current?.publicCode) {
+      const taken = await this.prisma.account.findFirst({
+        where: { publicCode: dto.publicCode, NOT: { id } },
+        select: { id: true },
+      });
+      if (taken) throw new BadRequestException('Mã acc đã được dùng');
+      const nextOrderCode = `DH-${dto.publicCode}`;
+      const takenOrder = await this.prisma.order.findUnique({ where: { code: nextOrderCode } });
+      if (takenOrder && takenOrder.accountId !== id) {
+        throw new BadRequestException('Mã đơn theo mã acc này đã tồn tại');
+      }
+      data.publicCode = dto.publicCode;
+    }
     const price = dto.price ?? current?.price ?? 0;
     const categoryId = await this.categoryIdOf(this.categoryCodeForPrice(price));
     if (!categoryId) throw new BadRequestException('Danh mục không tồn tại');
@@ -269,7 +282,15 @@ export class AccountsService {
     const nextStatus = dto.status ?? current?.status ?? 'AVAILABLE';
     if (nextStatus === 'RESERVED') Object.assign(data, this.dueData(current ?? null, nextStatus, dto.dueAt));
     if (dto.specs) data.specs = cleanSpecs(dto.specs);
-    await this.prisma.account.update({ where: { id }, data });
+    try {
+      await this.prisma.account.update({ where: { id }, data });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('Mã acc đã được dùng');
+      }
+      throw error;
+    }
+    if (data.publicCode !== undefined) await this.bumpPublicCodeSequence();
     await this.syncSaleOrder(id);
     return this.getAdmin(id);
   }
@@ -389,11 +410,29 @@ export class AccountsService {
     return email;
   }
 
+  private async bumpPublicCodeSequence() {
+    await this.prisma.$queryRaw`
+      SELECT setval(
+        pg_get_serial_sequence('"Account"', 'publicCode'),
+        GREATEST((SELECT COALESCE(MAX("publicCode"), 1) FROM "Account"), 1)
+      )
+    `;
+  }
+
   private async syncSaleOrder(id: string) {
     const account = await this.prisma.account.findUnique({ where: { id } });
     if (!account) return;
     const code = `DH-${account.publicCode}`;
-    const existing = await this.prisma.order.findUnique({ where: { code } });
+    const owned = await this.prisma.order.findFirst({
+      where: { accountId: id, code: { startsWith: 'DH-' }, status: { not: 'ABANDONED' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const byCode = await this.prisma.order.findUnique({ where: { code } });
+    if (byCode && byCode.accountId !== id) {
+      throw new BadRequestException('Mã đơn theo mã acc này đã tồn tại');
+    }
+    if (!owned && byCode?.status === 'ABANDONED') return;
+    const existing = owned ?? (byCode?.accountId === id ? byCode : null);
     if (existing?.status === 'ABANDONED') return;
     const selling = account.status === 'SOLD' || account.status === 'RESERVED';
     if (!selling) {
@@ -418,7 +457,7 @@ export class AccountsService {
       settlementAmount: account.status === 'SOLD' ? existing?.settlementAmount ?? null : null,
     };
     if (existing) {
-      await this.prisma.order.update({ where: { id: existing.id }, data });
+      await this.prisma.order.update({ where: { id: existing.id }, data: { ...data, code } });
       return;
     }
     await this.prisma.order.create({

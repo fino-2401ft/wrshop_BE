@@ -117,6 +117,7 @@ export class AdminOrdersController {
     for (const order of booked) {
       if (order.status === 'ABANDONED') {
         const paid = order.settlementAmount ?? 0;
+        revenue += paid;
         profit += paid;
         received += paid;
         continue;
@@ -150,7 +151,7 @@ export class AdminOrdersController {
           buyerName: order.buyerName,
           phone: order.phone,
           email: order.email,
-          amount: order.amount,
+          amount: order.status === 'ABANDONED' ? (order.settlementAmount ?? order.amount) : order.amount,
           remaining: installment ? order.account.price - paid : null,
           status: order.status,
           createdAt: order.createdAt,
@@ -223,7 +224,7 @@ export class AdminOrdersController {
       const paid = Math.min(Math.max(source.contributed, 0), source.price);
       await this.prisma.order.update({
         where: { id: order.id },
-        data: { status: 'ABANDONED', settlementAmount: paid, reclaimed: true },
+        data: { status: 'ABANDONED', amount: paid, settlementAmount: paid, reclaimed: true },
       });
       await this.prisma.account.update({
         where: { id: source.id },
@@ -253,9 +254,9 @@ export class AdminOrdersController {
           })),
         },
       },
-      select: { publicCode: true },
+      select: { id: true, publicCode: true },
     });
-    return { publicCode: created.publicCode };
+    return { id: created.id, publicCode: created.publicCode };
   }
 
   private whereFor(createdInMonth: { gte: Date; lt: Date } | undefined, raw?: string): Prisma.OrderWhereInput {
