@@ -168,6 +168,52 @@ export class AccountsService {
     };
   }
 
+  async exportSellingCsv() {
+    const rows = await this.prisma.account.findMany({
+      where: { status: 'AVAILABLE' },
+      include: { ...WITH_CATEGORY, _count: { select: { images: true } } },
+      orderBy: [{ isHot: 'desc' }, { publicCode: 'asc' }],
+    });
+    const header = [
+      'Ma',
+      'Hot',
+      'Danh muc',
+      'Gia',
+      'Username',
+      'Mat khau',
+      'Rank',
+      'Khung',
+      'Tuong',
+      'Skin',
+      'Rank HT',
+      'Khung HT',
+      'Mo ta',
+      'So anh',
+      'Dang luc',
+    ];
+    const lines = rows.map((row) => {
+      const specs = (row.specs ?? {}) as Record<string, string | undefined>;
+      return [
+        String(row.publicCode),
+        row.isHot ? 'Yes' : '',
+        row.shopCategory.title,
+        String(row.price),
+        row.gameUser,
+        row.gamePass,
+        specs.rank ?? '',
+        specs.frame ?? '',
+        specs.heroes ?? '',
+        specs.skins ?? '',
+        specs.rankHt ?? '',
+        specs.frameHt ?? '',
+        row.description ?? '',
+        String(row._count.images),
+        formatCsvDate(row.createdAt),
+      ].map(csvCell);
+    });
+    return `\uFEFF${[header.join(','), ...lines.map((line) => line.join(','))].join('\r\n')}\r\n`;
+  }
+
   async getAdmin(id: string) {
     const account = await this.prisma.account.findUnique({
       where: { id },
@@ -601,4 +647,14 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 40);
+}
+
+function csvCell(value: string) {
+  const text = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+function formatCsvDate(value: Date) {
+  return new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short' }).format(value);
 }

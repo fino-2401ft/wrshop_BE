@@ -7,11 +7,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AccountsService } from './accounts.service';
 import { AdminListQuery, CreateAccountDto, ReorderImagesDto, UpdateAccountDto } from './dto';
@@ -24,6 +26,14 @@ export class AdminAccountsController {
   @Get()
   list(@Query() query: AdminListQuery) {
     return this.accounts.listAdmin(query);
+  }
+
+  @Get('export/selling')
+  async exportSelling(@Res() res: Response) {
+    const csv = await this.accounts.exportSellingCsv();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="acc-dang-ban.csv"');
+    res.send(csv);
   }
 
   @Get(':id')
