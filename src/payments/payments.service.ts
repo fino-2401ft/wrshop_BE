@@ -150,6 +150,7 @@ export class PaymentsService implements OnModuleInit {
       const match = await this.findSepayPayment(order.code, order.amount);
       if (!match) return null;
       const fulfilled = await this.markPaid(order, match);
+      if (fulfilled) await this.notifyOwnerSold(fulfilled);
       const fresh = await this.prisma.order.findUnique({ where: { id: order.id }, include: { account: true } });
       if (!fresh) return null;
       if (fresh.status === 'PAID') return this.deliver(fulfilled ?? fresh);
@@ -182,7 +183,10 @@ export class PaymentsService implements OnModuleInit {
     }
 
     const fulfilled = await this.markPaid(order, payload);
-    if (fulfilled) await this.sendCredentials(fulfilled);
+    if (fulfilled) {
+      await this.sendCredentials(fulfilled);
+      await this.notifyOwnerSold(fulfilled);
+    }
     return { success: true };
   }
 
@@ -263,6 +267,43 @@ export class PaymentsService implements OnModuleInit {
       });
     } catch (error) {
       this.logger.error(`Gửi mail acc #${account.publicCode} thất bại`, error instanceof Error ? error.stack : undefined);
+    }
+  }
+
+  private ownerNotifyEmail() {
+    return (
+      this.config.get<string>('ADMIN_NOTIFY_EMAIL')?.trim() ||
+      this.config.get<string>('SMTP_USER')?.trim() ||
+      'king0xop@gmail.com'
+    );
+  }
+
+  private async notifyOwnerSold(order: PaymentOrder) {
+    const to = this.ownerNotifyEmail();
+    if (!to) return;
+    const account = order.account;
+    const text = [
+      `Có đơn hàng đã bán tại Wild Rift Store.`,
+      '',
+      `Acc: #${account.publicCode}`,
+      `Mã đơn: ${order.code}`,
+      `Số tiền: ${vnd(order.amount)}`,
+      `Người mua: ${order.buyerName || '(trống)'}`,
+      `Zalo/SĐT: ${order.phone || '(trống)'}`,
+      `Email khách: ${order.email || '(trống)'}`,
+      `Thanh toán lúc: ${order.paidAt ? order.paidAt.toISOString() : new Date().toISOString()}`,
+    ].join('\n');
+    try {
+      const sent = await this.mail.send(to, `[Đã bán] Acc #${account.publicCode} - ${order.code}`, text);
+      if (!sent) {
+        this.logger.warn(`Chưa cấu hình SMTP nên chưa gửi báo bán #${account.publicCode} tới ${to}`);
+        return;
+      }
+    } catch (error) {
+      this.logger.error(
+        `Gửi mail báo bán #${account.publicCode} thất bại`,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
   }
 

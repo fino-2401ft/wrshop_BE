@@ -260,7 +260,10 @@ export class AdminOrdersController {
   }
 
   private whereFor(createdInMonth: { gte: Date; lt: Date } | undefined, raw?: string): Prisma.OrderWhereInput {
-    const filters: Prisma.OrderWhereInput[] = [];
+    const filters: Prisma.OrderWhereInput[] = [
+      // Đơn đang chờ / hết hạn thanh toán QR không hiện trong list bán hàng
+      { status: { in: ['PAID', 'INSTALLMENT', 'ABANDONED'] } },
+    ];
     if (createdInMonth) filters.push({ createdAt: createdInMonth });
     const keyword = raw?.trim();
     if (keyword) {
@@ -276,7 +279,7 @@ export class AdminOrdersController {
       if (Number.isInteger(codeNumber) && codeNumber > 0) or.push({ account: { publicCode: codeNumber } });
       filters.push({ OR: or });
     }
-    return filters.length ? { AND: filters } : {};
+    return { AND: filters };
   }
 
   private async backfillSaleOrders() {
