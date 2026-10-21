@@ -1,4 +1,14 @@
-import { BadRequestException, Controller, Get, NotFoundException, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Delete,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
@@ -181,6 +191,14 @@ export class AdminOrdersController {
     };
   }
 
+  @Delete(':id')
+  async remove(@Param('id') id: string) {
+    const order = await this.prisma.order.findUnique({ where: { id }, select: { id: true, code: true } });
+    if (!order) throw new NotFoundException('Không tìm thấy đơn');
+    await this.prisma.order.delete({ where: { id } });
+    return { ok: true, code: order.code };
+  }
+
   @Post(':id/settle')
   async settle(@Param('id') id: string) {
     const order = await this.prisma.order.findUnique({ where: { id }, include: { account: true } });
@@ -283,10 +301,11 @@ export class AdminOrdersController {
   }
 
   private async backfillSaleOrders() {
+    // Chỉ tạo đơn DH- cho acc cũ chưa từng có Order (không tái tạo sau khi admin xóa).
     const accounts = await this.prisma.account.findMany({
       where: {
         status: { in: ['SOLD', 'RESERVED'] },
-        orders: { none: { code: { startsWith: 'DH-' } } },
+        orders: { none: {} },
       },
     });
     for (const account of accounts) {
