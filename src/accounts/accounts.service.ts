@@ -137,7 +137,9 @@ export class AccountsService {
     const pageSize = 20;
     const where: Prisma.AccountWhereInput = {};
     if (query.category) where.categoryId = (await this.categoryIdOf(query.category)) ?? '__missing__';
+    // Mặc định không hiện acc đã ẩn; chọn filter "Đã ẩn" mới xem lại.
     if (query.status) where.status = query.status;
+    else where.status = { not: 'HIDDEN' };
     const keyword = query.code?.trim();
     if (keyword) {
       const code = this.parseCode(keyword);
@@ -347,16 +349,24 @@ export class AccountsService {
       include: { images: true },
     });
     if (!account) throw new NotFoundException('Không tìm thấy acc');
-    try {
-      await this.prisma.account.delete({ where: { id } });
-    } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-        throw new BadRequestException('Acc đã có đơn hàng. Hãy chuyển trạng thái sang Ẩn');
-      }
-      throw error;
+
+    // Đơn chờ/hết hạn (QR SePay) vẫn giữ FK tới acc nên chặn xóa cứng.
+    await this.prisma.order.deleteMany({
+      where: { accountId: id, status: { in: ['PENDING', 'EXPIRED'] } },
+    });
+
+    const remainingOrders = await this.prisma.order.count({ where: { accountId: id } });
+    if (remainingOrders > 0) {
+      await this.prisma.account.update({
+        where: { id },
+        data: { status: 'HIDDEN', heldUntil: null },
+      });
+      return { ok: true, hidden: true };
     }
+
+    await this.prisma.account.delete({ where: { id } });
     await Promise.all(account.images.map((image) => this.removeStoredFile(image.key)));
-    return { ok: true };
+    return { ok: true, hidden: false };
   }
 
   async addImages(id: string, files: Express.Multer.File[], kind: string) {
