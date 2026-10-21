@@ -6,5 +6,6 @@ import { MailService } from './mail.service';
 @Module({
   controllers: [AdminOrdersController],
   providers: [MailService, InstallmentReminderService],
+  exports: [MailService],
 })
 export class OrdersModule {}

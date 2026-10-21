@@ -6,6 +6,7 @@ import { StorageModule } from './storage/storage.module';
 import { AuthModule } from './auth/auth.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { OrdersModule } from './orders/orders.module';
+import { PaymentsModule } from './payments/payments.module';
 import { BootstrapService } from './bootstrap/bootstrap.service';
 
 @Module({
@@ -17,6 +18,7 @@ import { BootstrapService } from './bootstrap/bootstrap.service';
     AuthModule,
     AccountsModule,
     OrdersModule,
+    PaymentsModule,
   ],
   providers: [BootstrapService],
 })

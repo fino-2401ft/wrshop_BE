@@ -34,7 +34,7 @@ export class AccountsService {
     const groups = await Promise.all(
       categories.map(async (category) => {
         const rows = await this.prisma.account.findMany({
-          where: { categoryId: category.id, status: 'AVAILABLE' },
+          where: this.onSale({ categoryId: category.id }),
           include: WITH_CATEGORY,
           orderBy: [{ isHot: 'desc' }, { createdAt: 'desc' }],
         });
@@ -480,6 +480,13 @@ export class AccountsService {
     if (!owned && byCode?.status === 'ABANDONED') return;
     const existing = owned ?? (byCode?.accountId === id ? byCode : null);
     if (existing?.status === 'ABANDONED') return;
+    if (account.status === 'SOLD') {
+      const paidOnline = await this.prisma.order.findFirst({
+        where: { accountId: id, status: 'PAID', paidTransactionId: { not: null } },
+        select: { id: true },
+      });
+      if (paidOnline) return;
+    }
     const selling = account.status === 'SOLD' || account.status === 'RESERVED';
     if (!selling) {
       if (existing && !existing.paidTransactionId) {
@@ -556,8 +563,16 @@ export class AccountsService {
     return found?.id;
   }
 
+  private onSale(extra: Prisma.AccountWhereInput = {}): Prisma.AccountWhereInput {
+    return { ...extra, status: 'AVAILABLE' };
+  }
+
+  private isForSale(account: { status: string }) {
+    return account.status === 'AVAILABLE';
+  }
+
   private async publicWhere(query: ListAccountsQuery): Promise<Prisma.AccountWhereInput> {
-    const where: Prisma.AccountWhereInput = { status: 'AVAILABLE' };
+    const where = this.onSale();
     if (query.category) where.categoryId = (await this.categoryIdOf(query.category)) ?? '__missing__';
     const code = this.parseCode(query.code);
     if (code) where.publicCode = code;
@@ -628,6 +643,7 @@ export class AccountsService {
       .sort((a, b) => a.sortOrder - b.sortOrder);
     return {
       ...this.toCard(account),
+      forSale: this.isForSale(account),
       images: images.map((image) => ({
         id: image.id,
         url: this.storage.publicUrl(image.url) ?? image.url,

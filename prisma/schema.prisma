@@ -59,6 +59,7 @@ model Account {
   consignment    Boolean        @default(false)
   isHot          Boolean        @default(false)
   dueAt          DateTime?
+  heldUntil      DateTime?
   reminded3dAt   DateTime?
   remindedDueAt  DateTime?
   images         AccountImage[]
@@ -98,7 +99,9 @@ model Order {
   reclaimed         Boolean     @default(false)
   expiresAt         DateTime
   paidAt            DateTime?
+  credentialsSentAt DateTime?
   createdAt         DateTime    @default(now())
 
   @@index([status, createdAt])
+  @@index([status, expiresAt])
 }
